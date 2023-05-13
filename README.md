@@ -4,7 +4,7 @@ A networking Summer project, implement FTP and use multithreading to send multip
 ## Setup the project
 ### First run the server one time only
 ```
-.\server_single.bat
+.\server_single.py
 ```
 
 ### To run the client
