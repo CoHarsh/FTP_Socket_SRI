@@ -10,6 +10,11 @@ COMMAND_LIST = 'LIST'
 COMMAND_DOWNLOAD = 'DOWNLOAD'
 COMMAND_UPLOAD = 'UPLOAD'
 
+# time_plot data
+LIST_TIME='list_timedata.csv'
+DOWNLOAD_TIME='download_timedata.csv'
+UPLOAD_TIME='upload_timedata.csv'
+
 # Data constants
 CHUNK_SIZE = 1024
 
@@ -32,9 +37,12 @@ def handle_command(connection, address):
             connection.sendall(file_list.encode())
             end_time = time.time()
             print(f"Time taken to list files: {(end_time - start_time) * 1000000} us")
+            with open('plot_data/'+LIST_TIME , 'a') as file:
+                file.write(f"{len(file_list)}, {(end_time - start_time) * 1000000}\n")
             continue
         elif command.startswith(COMMAND_DOWNLOAD):
             start_time = time.time()
+
             print(f"Received command: {command}")
             filename = command.split()[1]
             #check if file exists in server_side directory
@@ -42,6 +50,8 @@ def handle_command(connection, address):
                 connection.sendall(b'File not found')
                 continue
             print(f"Sending {filename} to {address[0]}:{address[1]}")
+            file_size = os.path.getsize('server_side/' + filename)
+            connection.sendall(str(file_size).encode())
             try:
                 with open('server_side/' + filename, 'rb') as file:
                     while True:
@@ -50,34 +60,44 @@ def handle_command(connection, address):
                             break
                         connection.sendall(data)
                 print(f"Finished sending {filename}")
-                connection.sendall(b'EOF')
                 end_time = time.time()
+                file_size = os.path.getsize('server_side/' + filename)
                 print(f"Time taken to download file: {(end_time - start_time) * 1000000} us")
+                #save to CSV file making download_timedata.csv
+                with open('plot_data/'+DOWNLOAD_TIME, 'a') as file:
+                    file.write(f"{file_size}, {(end_time - start_time) * 1000000}\n")
+
             except FileNotFoundError:
                 connection.sendall(b'File not found')
             continue
         elif command.startswith(COMMAND_UPLOAD):
             start_time = time.time()
+            file_size = connection.recv(1024).decode().strip()
+            file_size = int(file_size)
             print(f"Received command: {command}")
             filename = command.split()[1]
             print(f"Receiving {filename} from {address[0]}:{address[1]}")
             try:
                 with open('server_side/' + filename, 'wb') as file:
-                    while True:
+                    while int(file_size) > 0:
                         data = connection.recv(CHUNK_SIZE)
-                        if data == b'EOF':
+                        if not data:
                             break
                         file.write(data)
+                        file_size -= len(data)
                 print(f"Finished receiving {filename}")
                 end_time = time.time()
                 print(f"Time taken to upload file: {(end_time - start_time) * 1000000} us")
+                file_sz = os.path.getsize('server_side/' + filename)
+                #save to CSV file making upload_timedata.csv
+                with open('plot_data/'+UPLOAD_TIME, 'a') as file:
+                    file.write(f"{file_sz}, {(end_time - start_time) * 1000000}\n")
+                
             except FileNotFoundError:
                 connection.sendall(b'File not found')
             continue
         else:
-            print(f"Invalid command: {command}")
             break
-
     connection.close()
 
 # Start the server
