@@ -1,137 +1,94 @@
 import socket
-import threading
+import os
+import time
+# Server configuration
+SERVER_HOST = '127.0.0.1'
+SERVER_PORT = 12345
 
-ENCODE='utf-8'
-DECODE='utf-8'
+# Command constants
+COMMAND_LIST = 'LIST'
+COMMAND_DOWNLOAD = 'DOWNLOAD'
+COMMAND_UPLOAD = 'UPLOAD'
 
-def handle_stor(conn,path):
-    pass
+# Data constants
+CHUNK_SIZE = 1024
 
-def handle_command(conn, addr,data_addr,data_conn):
-    PACKET_SIZE = 1024
-    response = '220 Connection established\r\n'
-    conn.send(response.encode(ENCODE))
-
+def handle_command(connection, address):
     while True:
-        command = conn.recv(PACKET_SIZE).decode(DECODE).strip()
-        if not command:
+        command = connection.recv(1024).decode().strip()
+
+        if command == COMMAND_LIST:
+            #list all the files in server_side directory
+            # in microseconds
+            start_time = time.time()
+            print(f"Received command: {command}")
+            #If empty directory, send empty string
+            if not os.listdir('server_side'):
+                connection.sendall('EOF'.encode())
+                print("Server side directory is empty")
+                continue
+            file_list = os.listdir('server_side')
+            file_list = '\n'.join(file_list)
+            connection.sendall(file_list.encode())
+            end_time = time.time()
+            print(f"Time taken to list files: {(end_time - start_time) * 1000000} us")
+            continue
+        elif command.startswith(COMMAND_DOWNLOAD):
+            start_time = time.time()
+            print(f"Received command: {command}")
+            filename = command.split()[1]
+            #check if file exists in server_side directory
+            if filename not in os.listdir('server_side'):
+                connection.sendall(b'File not found')
+                continue
+            print(f"Sending {filename} to {address[0]}:{address[1]}")
+            try:
+                with open('server_side/' + filename, 'rb') as file:
+                    while True:
+                        data = file.read(CHUNK_SIZE)
+                        if not data:
+                            break
+                        connection.sendall(data)
+                print(f"Finished sending {filename}")
+                connection.sendall(b'EOF')
+                end_time = time.time()
+                print(f"Time taken to download file: {(end_time - start_time) * 1000000} us")
+            except FileNotFoundError:
+                connection.sendall(b'File not found')
+            continue
+        elif command.startswith(COMMAND_UPLOAD):
+            start_time = time.time()
+            print(f"Received command: {command}")
+            filename = command.split()[1]
+            print(f"Receiving {filename} from {address[0]}:{address[1]}")
+            try:
+                with open('server_side/' + filename, 'wb') as file:
+                    while True:
+                        data = connection.recv(CHUNK_SIZE)
+                        if data == b'EOF':
+                            break
+                        file.write(data)
+                print(f"Finished receiving {filename}")
+                end_time = time.time()
+                print(f"Time taken to upload file: {(end_time - start_time) * 1000000} us")
+            except FileNotFoundError:
+                connection.sendall(b'File not found')
+            continue
+        else:
+            print(f"Invalid command: {command}")
             break
 
-        command_parts = command.split()
-        command_name = command_parts[0].upper()
-        arguments = command_parts[1:]
+    connection.close()
 
-        # handle diff commands
-        if command_name == 'USER':
-            response = '331 User name okay, need password\r\n'
-        elif command_name == 'PASS':
-            response = '230 User logged in, proceed\r\n'
-            conn.send(response.encode(ENCODE))
-        elif command_name == 'STOR':
-            if(len(arguments) != 1):
-                response = "501 Syntax error in parameters or arguments\r\n"
-                response.send(response.encode(ENCODE))
-            else: 
-                file_path = arguments[0]
-                handle_data(data_conn, data_addr, file_path, 'STOR')
-                response = '226 Closing data connection. Requested file action successful\r\n'
-                conn.send(response.encode(ENCODE))
-        elif command_name == 'RETR':
-            if(len(arguments) != 1):
-                response = "501 Syntax error in parameters or arguments\r\n"
-                response.send(response.encode(ENCODE))
-            else:
-                file_path = arguments[0]
-                handle_data(data_conn, data_addr, file_path, 'RETR')
-                response = '226 Closing data connection. Requested file action successful\r\n'
-                conn.send(response.encode(ENCODE))
-        else :
-            response = '500 Syntax error, command unrecognized\r\n'
-            conn.send(response.encode(ENCODE))
-        data_conn.close()
-        conn.close()
+# Start the server
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket.bind((SERVER_HOST, SERVER_PORT))
+server_socket.listen(1)
 
+print(f"Server listening on {SERVER_HOST}:{SERVER_PORT}")
 
+while True:
+    client_socket, client_address = server_socket.accept()
+    print(f"New connection from {client_address[0]}:{client_address[1]}")
 
-def handle_data(conn, addr, file_path, mode):
-    PACKET_SIZE = 1024
-    if(mode == 'STOR'):
-        try:
-            file = open(file_path, 'wb')
-            while True:
-                data = conn.recv(PACKET_SIZE)
-                if not data:
-                    break
-                file.write(data)
-            file.close()
-            print("[SUCCESS]File saved")
-            conn.send("File saved msg from datachannel".encode(ENCODE))
-        except:
-            print("[ERROR]File not saved")
-            conn.send("File not saved".encode(ENCODE))
-            
-    elif(mode == 'RETR'):
-        try:
-            file = open(file_path, 'rb')
-            while True:
-                data = file.read(PACKET_SIZE)
-                if not data:
-                    break
-                conn.send(data)
-            file.close()
-            print("[SUCCESS]File sent")
-            conn.send("File sent".encode(ENCODE))
-        except:
-            print("[ERROR]File not sent")
-            conn.send("File not sent".encode(ENCODE))     
-    else:
-        print("[ERROR]Invalid mode")
-        conn.send("Invalid mode".encode(ENCODE))
-    
-
-def run_ftp_server():
-    HOST = 'localhost'
-    COMM_PORT = 21
-    DATA_PORT = 20
-    #create command channel
-    comm_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    comm_sock.bind((HOST, COMM_PORT))
-    comm_sock.listen(1)
-
-    print('FTP server is running on port %d' % COMM_PORT)
-
-    # accept commands from client
-    while True:
-        command_conn,command_addr = comm_sock.accept()
-        print('Command channel Connected by', command_addr)
-        command_conn.send('220 Connection established\r\n'.encode(ENCODE))
-
-        #create data channel
-        data_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        data_sock.bind((HOST, DATA_PORT))
-        data_sock.listen(1)
-
-        print('Data channel is running on port %d' % DATA_PORT)
-
-        # accept data from client
-        data_conn, data_addr = data_sock.accept()
-        print('Data channel Connected by', data_addr)
-        data_conn.send('220 Connection established\r\n'.encode(ENCODE))
-
-        #start two threads to handle command and data
-        command_thread = threading.Thread(target=handle_command, args=(command_conn, command_addr,data_addr,data_conn))
-        data_thread = threading.Thread(target=handle_data, args=(data_conn, data_addr, '',''))
-
-        command_thread.start()
-        data_thread.start()
-
-        command_thread.join()
-        data_thread.join()
-
-        data_conn.close()
-
-
-
-
-if __name__ == '__main__':
-    run_ftp_server()
+    handle_command(client_socket, client_address)
