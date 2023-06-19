@@ -2,26 +2,31 @@
 A networking Summer project, implement FTP and use multithreading to send multiple packet on the same time. 
 
 ## Setup the project
-### First run the server one time only
+### First run the server file using
 ```
-.\server_single.py
-```
-
-### To run the client
-```
- .\run_script.bat
- ```
-### To get the plot of data
-```
-python plot_graph.py
+pyhton server.py
+or
+.\server.py
 ```
 
-## TODO
-- Generate adequet data to plot good graph
-- Multithreding of the packages send over the socket
-- make the plot more understandable
-- automate the data generation of file which is begin send over the socket
-``` 
-like 1MB, 100MB, 200MB using lorem API, this is needed to support the data generation for plotting 
+### Now in new terminal run the client file using
 ```
-- What next???
+pyhton client.py
+or
+.\client.py
+```
+## Upload
+### You need to copy file (which you want to upload) in to main folder. THe uploaded file will be in sever_side folder.
+```
+UPLOAD <filename>
+```
+## Download
+### You have to select a file from the all the files.
+### Type below command to see all files on server
+```
+LIST
+```
+### To download file from server
+```
+DOWNLOAD <filename>
+```
